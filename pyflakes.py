@@ -21,8 +21,12 @@ class PyflakesListener(sublime_plugin.EventListener):
   def on_post_save(self, view):
     self.exec_plugin(view)
 
+  def on_close(self, view):
+    del self.pyflakes_messages[view.id()]
+    del self.pyflakes_status_bar_current_key[view.id()]
+
   def on_selection_modified(self, view):
-    if self.is_python_file(view):
+    if self.is_python_view(view):
       regions = view.get_regions(PYFLAKES_REGION_NAME)
       for region in regions:
         if region.contains(view.sel()[0]):
@@ -30,7 +34,7 @@ class PyflakesListener(sublime_plugin.EventListener):
           break
   
   def exec_plugin(self, view):
-    if self.is_python_file(view):
+    if self.is_python_view(view):
       self.clear_regions(view)
       output, error = self.run_pyflakes(view.file_name())
 
@@ -80,7 +84,7 @@ class PyflakesListener(sublime_plugin.EventListener):
     return process.communicate()
 
   @staticmethod
-  def is_python_file(view):
+  def is_python_view(view):
     return bool(re.search('Python',
                   view.settings().get('syntax'),
                   re.I))
