@@ -2,7 +2,8 @@
 import re
 import subprocess
 
-import sublime, sublime_plugin
+import sublime_plugin
+
 
 PYFLAKES_REGION_NAME = 'PyflakesWarnings'
 PYFLAKES_BINARY = 'pyflakes'
@@ -11,6 +12,7 @@ PYFLAKES_BINARY = 'pyflakes'
 class PyflakesListener(sublime_plugin.EventListener):
   
   pyflakes_messages = dict()
+  pyflakes_status_bar_current_key = dict()
 
 
   def on_load(self, view):
@@ -24,18 +26,13 @@ class PyflakesListener(sublime_plugin.EventListener):
       regions = view.get_regions(PYFLAKES_REGION_NAME)
       for region in regions:
         if region.contains(view.sel()[0]):
-          self.show_status_bar_message_from_region(view.id(), region)
+          self.set_status_bar_message_from_region(view, region)
           break
   
   def exec_plugin(self, view):
     if self.is_python_file(view):
-      view.erase_regions(PYFLAKES_REGION_NAME)
-      self.pyflakes_messages[view.id()] = list()
-
-      file_name = view.file_name().replace(' ', '\ ')
-      process = subprocess.Popen([PYFLAKES_BINARY, file_name],
-                  stdout=subprocess.PIPE)
-      output, error = process.communicate()
+      self.clear_regions(view)
+      output, error = self.run_pyflakes(view.file_name())
 
       lines = list()
       for result in self.parse_pyflakes(output):
@@ -44,12 +41,29 @@ class PyflakesListener(sublime_plugin.EventListener):
           self.add_pyflakes_messages(view.id(), line, result['text'])
           lines.append(line)
 
-      self.set_markers_on_gutter(view, lines)
+      if (len(lines) > 0):
+        self.set_markers_on_gutter(view, lines)
 
-  def show_status_bar_message_from_region(self, view_id, region):
-    for message in self.pyflakes_messages.get(view_id, list()):
+  def clear_regions(self, view):
+    view.erase_regions(PYFLAKES_REGION_NAME)
+    self.pyflakes_messages[view.id()] = list()
+    self.clear_status_bar(view)
+
+  def clear_status_bar(self, view):
+    current_key = self.pyflakes_status_bar_current_key.get(view.id())
+    if current_key:
+      view.erase_status(current_key)
+    self.pyflakes_status_bar_current_key[view.id()] = None
+
+  def set_status_bar(self, view, text):
+    self.clear_status_bar(view)
+    view.set_status(text, text)
+    self.pyflakes_status_bar_current_key[view.id()] = text
+
+  def set_status_bar_message_from_region(self, view, region):
+    for message in self.pyflakes_messages.get(view.id(), list()):
       if message['region'] == region:
-        sublime.status_message(message['text'])
+        self.set_status_bar(view, message['text'])
         break
 
   def add_pyflakes_messages(self, view_id, line, text):
@@ -58,6 +72,12 @@ class PyflakesListener(sublime_plugin.EventListener):
         'text': text,
       })
 
+  @staticmethod
+  def run_pyflakes(file_name):
+    file_name = file_name.replace(' ', '\ ')
+    process = subprocess.Popen([PYFLAKES_BINARY, file_name],
+                stdout=subprocess.PIPE)
+    return process.communicate()
 
   @staticmethod
   def is_python_file(view):
