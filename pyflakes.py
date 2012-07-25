@@ -15,15 +15,23 @@ class PyflakesListener(sublime_plugin.EventListener):
   pyflakes_status_bar_current_key = dict()
 
 
+  # sublime_plugin.EventListener
+
   def on_load(self, view):
-    self.exec_plugin(view)
+    if self.is_python_view(view):
+      self.exec_plugin(view)
 
   def on_post_save(self, view):
-    self.exec_plugin(view)
+    if self.is_python_view(view):
+      self.exec_plugin(view)
 
   def on_close(self, view):
-    del self.pyflakes_messages[view.id()]
-    del self.pyflakes_status_bar_current_key[view.id()]
+    if self.is_python_view(view):
+      view_id = view.id()
+      if view_id in self.pyflakes_messages:
+        del self.pyflakes_messages[view.id()]
+      if view_id in self.pyflakes_status_bar_current_key:
+        del self.pyflakes_status_bar_current_key[view.id()]
 
   def on_selection_modified(self, view):
     if self.is_python_view(view):
@@ -33,20 +41,22 @@ class PyflakesListener(sublime_plugin.EventListener):
           self.set_status_bar_message_from_region(view, region)
           break
   
+
+  # PyflakesListener
+
   def exec_plugin(self, view):
-    if self.is_python_view(view):
-      self.clear_regions(view)
-      output, error = self.run_pyflakes(view.file_name())
+    self.clear_regions(view)
+    output, error = self.run_pyflakes(view.file_name())
 
-      lines = list()
-      for result in self.parse_pyflakes(output):
-        line = self.line_from_line_number(view, result['line_number'])
-        if line:
-          self.add_pyflakes_messages(view.id(), line, result['text'])
-          lines.append(line)
+    lines = list()
+    for result in self.parse_pyflakes(output):
+      line = self.line_from_line_number(view, result['line_number'])
+      if line:
+        self.add_pyflakes_messages(view.id(), line, result['text'])
+        lines.append(line)
 
-      if (len(lines) > 0):
-        self.set_markers_on_gutter(view, lines)
+    if (len(lines) > 0):
+      self.set_markers_on_gutter(view, lines)
 
   def clear_regions(self, view):
     view.erase_regions(PYFLAKES_REGION_NAME)
